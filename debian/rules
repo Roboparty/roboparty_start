@@ -5,13 +5,13 @@
 override_dh_install:
 	dh_install
 	if [ -f "linux-router/lnxrouter" ]; then \
-		mkdir -p debian/roboparty-go/opt/roboparty/bin; \
-		cp linux-router/lnxrouter debian/roboparty-go/opt/roboparty/bin/; \
+		mkdir -p debian/roboparty-start/opt/roboparty/bin; \
+		cp linux-router/lnxrouter debian/roboparty-start/opt/roboparty/bin/; \
 	fi
 
 override_dh_fixperms:
 	dh_fixperms
-	chmod +x debian/roboparty-go/opt/roboparty/bin/*.sh || true
-	if [ -f "debian/roboparty-go/opt/roboparty/bin/lnxrouter" ]; then \
-		chmod +x debian/roboparty-go/opt/roboparty/bin/lnxrouter; \
+	chmod +x debian/roboparty-start/opt/roboparty/bin/*.sh || true
+	if [ -f "debian/roboparty-start/opt/roboparty/bin/lnxrouter" ]; then \
+		chmod +x debian/roboparty-start/opt/roboparty/bin/lnxrouter; \
 	fi

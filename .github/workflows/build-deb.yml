@@ -1,4 +1,4 @@
-name: Build Roboparty Go Deb Package
+name: Build Roboparty Start Deb Package
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
     - name: Upload Debian package
       uses: actions/upload-artifact@v4
       with:
-        name: roboparty-go-v${{ env.PKG_VERSION }}-all
+        name: roboparty-start-v${{ env.PKG_VERSION }}-all
         path: "*.deb"
 
     - name: Upload to GitHub Release

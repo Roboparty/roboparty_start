@@ -1,2 +1,4 @@
 start_robot.sh opt/roboparty/bin/
+start_camera.sh opt/roboparty/bin/
+ros_environment.sh opt/roboparty/bin/
 rt_fastdds_profile.xml opt/roboparty/share/

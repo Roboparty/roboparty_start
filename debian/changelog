@@ -1,16 +1,30 @@
-roboparty-go (1.1.0-1) stable; urgency=medium
+roboparty-start (1.3.0-1) stable; urgency=medium
+
+  * Rename the binary package from roboparty-go to roboparty-start, with
+    Provides/Replaces/Conflicts for an in-place upgrade.
+  * Sync start_robot.sh with roboparty_deploy: robot/policy CLI options,
+    automatic ROS 2 (Humble/Jazzy) detection, realtime isolation lock check
+    and the roboparty_inference launch interface.
+  * Install ros_environment.sh alongside start_robot.sh.
+  * Add start_camera.sh with the same source-tree / Debian dual-mode
+    handling, launching realsense2_camera and roboparty_camera.
+  * Update rt_fastdds_profile.xml with the deployment interface whitelist.
+
+ -- RoboParty <2321901849@qq.com>  Tue, 03 Nov 2026 23:45:00 +0800
+
+roboparty-start (1.1.0-1) stable; urgency=medium
 
   * add lic
 
  -- wentywenty <2321901849@qq.com>  Tue, 19 May 2026 11:44:42 +0800
 
-roboparty-go (1.0.2-1) stable; urgency=medium
+roboparty-start (1.0.2-1) stable; urgency=medium
 
   * Update standard deb package
 
  -- wentywenty <2321901849@qq.com>  Thu, 07 May 2026 16:50:37 +0800
 
-roboparty-go (1.0.1-1) unstable; urgency=medium
+roboparty-start (1.0.1-1) unstable; urgency=medium
 
   * Convert to native Debian package format.
 

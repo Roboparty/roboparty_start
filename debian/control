@@ -1,14 +1,17 @@
-Source: roboparty-go
+Source: roboparty-start
 Section: misc
 Priority: optional
 Maintainer: RoboParty <ZhihaoLiu_hit@163.com>
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.0
 
-Package: roboparty-go
+Package: roboparty-start
 Architecture: all
 Depends: roboparty-base (>= 1.0.0), screen, ${misc:Depends}
-Description: RoboParty go scripts
+Provides: roboparty-go
+Replaces: roboparty-go
+Conflicts: roboparty-go
+Description: RoboParty start scripts
  Robot startup scripts and Fast DDS real-time QoS profile.
- Provides start_robot.sh for launching inference and joystick
- nodes in screen sessions.
+ Provides start_robot.sh and start_camera.sh for launching inference,
+ joystick and depth camera nodes in screen sessions.

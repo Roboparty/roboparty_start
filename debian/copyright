@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: roboparty-go
-Source: https://github.com/Roboparty/roboparty_go
+Upstream-Name: roboparty-start
+Source: https://github.com/Roboparty/roboparty_start
 
 Files: *
 Copyright: 2025-2026 Luo1imasi
