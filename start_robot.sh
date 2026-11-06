@@ -26,7 +26,7 @@ print_error() {
 }
 
 show_usage() {
-    echo "用法: $0 [--robot ROBOT] [--policy POLICY]"
+    echo "用法: $0 [--robot ROBOT] [--policy POLICY] [--foreground]"
     echo "      $0 [ROBOT] [POLICY]"
     echo
     echo "默认: robot=rpo, policy=default；ROS 自动检测，仅支持 Humble、Jazzy"
@@ -48,6 +48,8 @@ ROBOT="rpo"
 POLICY="default"
 ROBOT_SET=0
 POLICY_SET=0
+FOREGROUND=0
+PIDS=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -70,6 +72,10 @@ while [ $# -gt 0 ]; do
             POLICY="$2"
             POLICY_SET=1
             shift 2
+            ;;
+        --foreground)
+            FOREGROUND=1
+            shift
             ;;
         --help|-h)
             show_usage
@@ -96,6 +102,7 @@ validate_name "robot" "$ROBOT"
 validate_name "policy" "$POLICY"
 
 export ROBOT_CONTROL_ISOLATION="${ROBOT_CONTROL_ISOLATION:-isolated}"
+CONTROL_LOCK="${ROBOPARTY_CONTROL_LOCK:-/dev/shm/roboparty-control.lock}"
 
 # 函数：启动组件并检查（先启动ROS节点，再设置实时优先级）
 start_component() {
@@ -105,9 +112,16 @@ start_component() {
     local sleep_time=$4
 
     print_info "启动 $session_name ..."
+    local lock_held="${ROBOPARTY_CONTROL_LOCK_HELD:-0}"
+    if [ "$session_name" = "inference_session" ] && [ "$lock_held" != "1" ]; then
+        if ! flock -n "$CONTROL_LOCK" true; then
+            print_error "机器人正被运控或维护任务占用（$CONTROL_LOCK）；请先停止运控/维护任务"
+            return 1
+        fi
+    fi
     local screen_args=(-dmS "$session_name")
     local authenticate=""
-    if [ "$session_name" = "inference_session" ] && [ "$ROBOT_CONTROL_ISOLATION" = "isolated" ] && [ "$EUID" -ne 0 ]; then
+    if [ "$FOREGROUND" != "1" ] && [ "$session_name" = "inference_session" ] && [ "$ROBOT_CONTROL_ISOLATION" = "isolated" ] && [ "$EUID" -ne 0 ]; then
         if [ -t 0 ] && [ -t 1 ]; then
             print_info "请在会话内完成 sudo 验证，随后自动转入后台；仅隔离管理程序提权"
             screen_args=(-S "$session_name")
@@ -117,15 +131,31 @@ start_component() {
             print_info "无交互终端，隔离管理程序将使用 sudo 非交互授权"
         fi
     fi
-    screen "${screen_args[@]}" bash -c "${authenticate}${SETUP_CMD}; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; $launch_cmd; exec bash" || {
-        cleanup_sessions
-        return 1
-    }
+    local inner="${SETUP_CMD}; export RMW_IMPLEMENTATION='$RMW_IMPLEMENTATION'; export RMW_FASTRTPS_USE_QOS_FROM_XML='$RMW_FASTRTPS_USE_QOS_FROM_XML'; export FASTRTPS_DEFAULT_PROFILES_FILE='$FASTRTPS_DEFAULT_PROFILES_FILE'; $launch_cmd"
+    if [ "$FOREGROUND" != "1" ]; then
+        inner="${inner}; exec bash"
+    fi
+    if [ "$session_name" = "inference_session" ] && [ "$lock_held" != "1" ]; then
+        inner="flock -n $(printf %q "$CONTROL_LOCK") bash -c $(printf %q "$inner")"
+    fi
+    if [ "$FOREGROUND" = "1" ]; then
+        bash -c "$inner" &
+        PIDS+=("$!")
+    else
+        screen "${screen_args[@]}" bash -c "${authenticate}${inner}" || {
+            cleanup_sessions
+            return 1
+        }
+    fi
     sleep $sleep_time
 
     if ! ros2 node list | grep -q "$node_name"; then
         print_error "$session_name 启动失败！未检测到 $node_name 节点。"
-        cleanup_sessions
+        if [ "$FOREGROUND" = "1" ]; then
+            for pid in "${PIDS[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
+        else
+            cleanup_sessions
+        fi
         exit 1
     fi
 }
@@ -313,6 +343,15 @@ start_component "joy_session" "ros2 run joy joy_node" "joy_node" 2 || exit 1
 
 # 验证节点的 DDS 配置
 verify_dds_effectiveness
+
+if [ "$FOREGROUND" = "1" ]; then
+    print_success "前台模式：inference/joy 已启动，等待退出"
+    status=0
+    wait -n || status=$?
+    for pid in "${PIDS[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
+    wait || true
+    exit "$status"
+fi
 
 # 所有组件启动完成
 print_success "----------------------------------------"
