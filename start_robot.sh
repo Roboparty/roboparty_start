@@ -29,7 +29,7 @@ show_usage() {
     echo "用法: $0 [--robot ROBOT] [--policy POLICY] [--foreground]"
     echo "      $0 [ROBOT] [POLICY]"
     echo
-    echo "默认: robot=rpo, policy=default；ROS 自动检测，仅支持 Humble、Jazzy"
+    echo "默认: robot 从 /etc/roboparty/product.json 读取，policy=default；ROS 自动检测，仅支持 Humble、Jazzy"
     echo "示例: $0 --robot rpo --policy amp"
     echo "示例: $0 rpo beyondmimic"
 }
@@ -44,7 +44,7 @@ validate_name() {
     fi
 }
 
-ROBOT="rpo"
+ROBOT=""
 POLICY="default"
 ROBOT_SET=0
 POLICY_SET=0
@@ -97,6 +97,18 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+if [ -z "$ROBOT" ]; then
+    if command -v roboparty-product >/dev/null 2>&1; then
+        ROBOT="$(roboparty-product profile)" || {
+            print_error "产品配置无效；请先在 TUI 完成产品初始化，或显式传入 --robot"
+            exit 1
+        }
+    else
+        print_error "未找到 roboparty-product；请显式传入 --robot，或安装 roboparty-product"
+        exit 1
+    fi
+fi
 
 validate_name "robot" "$ROBOT"
 validate_name "policy" "$POLICY"

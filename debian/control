@@ -1,13 +1,13 @@
 Source: roboparty-start
 Section: misc
 Priority: optional
-Maintainer: RoboParty <ZhihaoLiu_hit@163.com>
+Maintainer: wentywenty <2321901849@qq.com>
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.0
 
 Package: roboparty-start
 Architecture: all
-Depends: roboparty-base (>= 1.0.0), screen, ${misc:Depends}
+Depends: roboparty-base (>= 1.0.0), screen, python3, ${misc:Depends}
 Provides: roboparty-go
 Replaces: roboparty-go
 Conflicts: roboparty-go

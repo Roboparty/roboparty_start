@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 RoboParty
+
+"""Read and validate the robot product profile."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import platform
+import sys
+
+PRODUCT_FILE = Path(os.environ.get('ROBOPARTY_PRODUCT_FILE', '/etc/roboparty/product.json'))
+BOARD_RELEASE = Path(os.environ.get('ROBOPARTY_BOARD_RELEASE', '/etc/armbian-release'))
+MODEL = Path(os.environ.get('ROBOPARTY_BOARD_MODEL', '/proc/device-tree/model'))
+ROBOTS_DIR = Path(os.environ.get('ROBOPARTY_ROBOTS_DIR', '/opt/roboparty/share/roboparty_inference/robots'))
+BOARD_PRODUCTS = {
+    'rdkx5': {'rpo'},
+    'robopi2': {'rp1', 'rp1_24dof'},
+    'opi5pro': {'rp1', 'rp1_24dof'},
+}
+AUTO_BOARD_PRODUCT = {'rdkx5': 'rpo', 'robopi2': 'rp1', 'opi5pro': 'rp1'}
+
+
+def board_id():
+    for line in _read(BOARD_RELEASE).splitlines():
+        key, separator, value = line.partition('=')
+        if separator and key.strip() == 'BOARD':
+            value = value.strip().strip('"\'')
+            if value:
+                return _normalize(value)
+    model = _read(MODEL).upper()
+    if 'RDK X5' in model or 'RDK-X5' in model:
+        return 'rdkx5'
+    if 'ROBOPI2' in model or 'ROBO PI2' in model:
+        return 'robopi2'
+    if 'OPI5' in model or 'ORANGE PI 5' in model:
+        return 'opi5pro'
+    machine = platform.machine().lower()
+    return _normalize(machine)
+
+
+def _normalize(value):
+    value = ''.join(ch for ch in str(value).lower() if ch.isalnum())
+    return {'rdkx5': 'rdkx5', 'robopi2': 'robopi2', 'opi5pro': 'opi5pro',
+            'x8664': 'x86_64', 'amd64': 'x86_64'}.get(value, value)
+
+
+def _read(path):
+    try:
+        return Path(path).read_text(encoding='utf-8', errors='replace').strip('\x00\n ')
+    except OSError:
+        return ''
+
+
+def load(path=PRODUCT_FILE):
+    try:
+        data = json.loads(Path(path).read_text(encoding='utf-8'))
+    except FileNotFoundError as exc:
+        raise ValueError(f'product config missing: {path}') from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f'invalid product config: {exc}') from exc
+    if not isinstance(data, dict) or data.get('schema') != 1:
+        raise ValueError('product config must be a schema 1 object')
+    return data
+
+
+def resolve(data=None, board=None):
+    data = load(PRODUCT_FILE) if data is None else data
+    board = board or board_id()
+    product = str(data.get('product') or '').strip()
+    profile = str(data.get('profile') or '').strip()
+    if product in ('', 'auto'):
+        product = AUTO_BOARD_PRODUCT.get(board, '')
+    if profile in ('', 'auto'):
+        profile = product
+    if not product or not profile:
+        raise ValueError(f'cannot infer product for board {board or "unknown"}')
+    allowed = BOARD_PRODUCTS.get(board)
+    if allowed is not None and product not in allowed:
+        raise ValueError(f'product {product} is not supported on board {board}')
+    if board not in BOARD_PRODUCTS and board != 'x86_64':
+        raise ValueError(f'unsupported board: {board or "unknown"}')
+    return {'board': board, 'product': product, 'profile': profile,
+            'dof': int(data.get('dof') or 0), 'sku': str(data.get('sku') or '')}
+
+
+def validate(data=None, robots_dir=ROBOTS_DIR, board=None):
+    info = resolve(data, board)
+    profile_dir = Path(robots_dir) / info['profile']
+    if info['board'] != 'x86_64' and not (profile_dir / 'robot.yaml').is_file():
+        raise ValueError(f'robot profile missing: {profile_dir / "robot.yaml"}')
+    if not info['profile'].replace('_', '').isalnum():
+        raise ValueError(f'invalid profile name: {info["profile"]}')
+    return info
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='RoboParty product profile helper')
+    sub = parser.add_subparsers(dest='command', required=True)
+    sub.add_parser('show')
+    sub.add_parser('profile')
+    check = sub.add_parser('validate')
+    check.add_argument('--profile')
+    args = parser.parse_args(argv)
+    try:
+        info = validate()
+        if args.command == 'profile':
+            print(info['profile'])
+        else:
+            if args.command == 'validate' and args.profile and args.profile != info['profile']:
+                raise ValueError(f'profile mismatch: config={info["profile"]} request={args.profile}')
+            print(json.dumps(info, ensure_ascii=False, sort_keys=True))
+    except ValueError as exc:
+        print(f'roboparty-product: {exc}', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
