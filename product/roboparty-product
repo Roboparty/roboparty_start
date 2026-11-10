@@ -11,18 +11,49 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import sys
+
+PROFILE_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$')
 
 PRODUCT_FILE = Path(os.environ.get('ROBOPARTY_PRODUCT_FILE', '/etc/roboparty/product.json'))
 BOARD_RELEASE = Path(os.environ.get('ROBOPARTY_BOARD_RELEASE', '/etc/armbian-release'))
 MODEL = Path(os.environ.get('ROBOPARTY_BOARD_MODEL', '/proc/device-tree/model'))
-ROBOTS_DIR = Path(os.environ.get('ROBOPARTY_ROBOTS_DIR', '/opt/roboparty/share/roboparty_inference/robots'))
+ROBOOS_PREFIX = Path(os.environ.get('ROBOOS_PREFIX') or '/opt/roboparty')
+ROBOTS_DIR = Path(os.environ.get('ROBOPARTY_ROBOTS_DIR', ROBOOS_PREFIX / 'share/roboparty_inference/robots'))
 BOARD_PRODUCTS = {
     'rdkx5': {'rpo'},
     'robopi2': {'rp1', 'rp1_24dof'},
     'opi5pro': {'rp1', 'rp1_24dof'},
 }
-AUTO_BOARD_PRODUCT = {'rdkx5': 'rpo', 'robopi2': 'rp1', 'opi5pro': 'rp1'}
+AUTO_BOARD_PRODUCT = {'rdkx5': 'rpo', 'robopi2': 'rp1', 'opi5pro': 'rp1',
+                      'x86_64': 'rpo-sim'}
+CAPABILITIES = (
+    'bms', 'camera', 'addon', 'hipnuc', 'hpm', 'lro', 'adb',
+    'head', 'hand', 'lidar',
+)
+_EMPTY = {name: False for name in CAPABILITIES}
+CAPABILITY_PACKAGES = {
+    'bms': 'roboparty-bms',
+    'camera': 'roboparty-camera',
+    'addon': 'robopi-addon',
+    'hipnuc': 'roboparty-imu',
+    'hpm': 'roboparty-analyze',
+    'lro': 'roboparty-motors',
+    'adb': 'adbd',
+    'head': 'roboparty-rp-head',
+    'hand': 'roboparty-dexhand',
+    'lidar': 'roboparty-lidar',
+}
+PRODUCT_CAPABILITIES = {
+    'rpo': dict(_EMPTY),
+    'rp1': {**_EMPTY, 'bms': True, 'camera': True, 'addon': True,
+            'hipnuc': True, 'hpm': True, 'lro': True, 'adb': True},
+    'rp1_24dof': {**_EMPTY, 'bms': True, 'camera': True, 'addon': True,
+                  'hipnuc': True, 'hpm': True, 'lro': True, 'adb': True},
+    'rpo-sim': dict(_EMPTY),
+    'rp1-sim': dict(_EMPTY),
+}
 
 
 def board_id():
@@ -84,16 +115,29 @@ def resolve(data=None, board=None):
         raise ValueError(f'product {product} is not supported on board {board}')
     if board not in BOARD_PRODUCTS and board != 'x86_64':
         raise ValueError(f'unsupported board: {board or "unknown"}')
+    defaults = PRODUCT_CAPABILITIES.get(product)
+    if defaults is None:
+        raise ValueError(f'unknown product: {product}')
+    explicit = data.get('capabilities') or {}
+    if not isinstance(explicit, dict):
+        raise ValueError('capabilities must be an object')
+    unknown = set(explicit) - set(CAPABILITIES)
+    if unknown:
+        raise ValueError('unknown capabilities: ' + ', '.join(sorted(unknown)))
+    if any(type(value) is not bool for value in explicit.values()):
+        raise ValueError('capability values must be booleans')
+    capabilities = {**defaults, **explicit}
     return {'board': board, 'product': product, 'profile': profile,
-            'dof': int(data.get('dof') or 0), 'sku': str(data.get('sku') or '')}
+            'dof': int(data.get('dof') or 0), 'sku': str(data.get('sku') or ''),
+            'capabilities': capabilities}
 
 
 def validate(data=None, robots_dir=ROBOTS_DIR, board=None):
     info = resolve(data, board)
     profile_dir = Path(robots_dir) / info['profile']
-    if info['board'] != 'x86_64' and not (profile_dir / 'robot.yaml').is_file():
+    if not info['profile'].endswith('-sim') and not (profile_dir / 'robot.yaml').is_file():
         raise ValueError(f'robot profile missing: {profile_dir / "robot.yaml"}')
-    if not info['profile'].replace('_', '').isalnum():
+    if not PROFILE_PATTERN.fullmatch(info['profile']):
         raise ValueError(f'invalid profile name: {info["profile"]}')
     return info
 
@@ -103,6 +147,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('show')
     sub.add_parser('profile')
+    sub.add_parser('capabilities')
+    sub.add_parser('packages')
     check = sub.add_parser('validate')
     check.add_argument('--profile')
     args = parser.parse_args(argv)
@@ -110,6 +156,12 @@ def main(argv=None):
         info = validate()
         if args.command == 'profile':
             print(info['profile'])
+        elif args.command == 'capabilities':
+            print(json.dumps(info['capabilities'], ensure_ascii=False, sort_keys=True))
+        elif args.command == 'packages':
+            print('\n'.join(CAPABILITY_PACKAGES[name] for name, enabled
+                            in info['capabilities'].items()
+                            if enabled and name in CAPABILITY_PACKAGES))
         else:
             if args.command == 'validate' and args.profile and args.profile != info['profile']:
                 raise ValueError(f'profile mismatch: config={info["profile"]} request={args.profile}')

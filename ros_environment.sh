@@ -1,6 +1,17 @@
 #!/bin/bash
 
 setup_ros_environment() {
+    # 显式指定 ROS 2 环境脚本时优先使用（例如 ROS_SETUP=/opt/ros/jazzy/setup.bash）
+    if [ -n "${ROS_SETUP:-}" ]; then
+        if [ ! -f "$ROS_SETUP" ]; then
+            print_error "ROS_SETUP 指向的文件不存在: $ROS_SETUP"
+            return 1
+        fi
+        source "$ROS_SETUP" || return 1
+        print_info "选择 ROS 2 环境: $ROS_SETUP"
+        return 0
+    fi
+
     local selected=auto
     case "$selected" in
         auto)

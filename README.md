@@ -15,4 +15,4 @@ This repository contains runtime configurations and scripts for the RoboParty ro
 ```bash
 sudo apt install roboparty-start
 ```
-Scripts and configs will be placed into the appropriate directories under `/opt/roboparty/`.
+Scripts and configs will be placed into the appropriate directories under the configured install prefix (default `/opt/roboparty/`).

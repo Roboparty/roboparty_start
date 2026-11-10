@@ -8,6 +8,9 @@ Standards-Version: 4.6.0
 Package: roboparty-start
 Architecture: all
 Depends: roboparty-base (>= 1.0.0), screen, python3, ${misc:Depends}
+Recommends: roboparty-navigation, roboparty-inference, roboparty-camera,
+            ros-jazzy-joy | ros-humble-joy,
+            ros-jazzy-realsense2-camera | ros-humble-realsense2-camera
 Provides: roboparty-go
 Replaces: roboparty-go
 Conflicts: roboparty-go

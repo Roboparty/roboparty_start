@@ -175,27 +175,32 @@ done
 
 validate_name "policy" "$POLICY"
 
-# 脚本安装于 Debian 包时为 /opt/roboparty/bin，源码树中为 <repo>/tools。
+# 安装前缀优先取 ROBOOS_PREFIX（/etc/roboos/env 或环境变量），其次由脚本位置推导。
+# 脚本安装于 Debian 包时为 <prefix>/bin，源码树中为 <repo>/tools。
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -r /etc/roboos/env ] && . /etc/roboos/env
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -n "${ROBOOS_PREFIX:-}" ] && [ "$SCRIPT_DIR" = "$ROBOOS_PREFIX/bin" ]; then
+    BASE_DIR="$ROBOOS_PREFIX"
+fi
 
 POLICY_FILE="$POLICY"
 if [[ "$POLICY_FILE" != *.yaml ]]; then
     POLICY_FILE="${POLICY_FILE}.yaml"
 fi
 
-if [ "$SCRIPT_DIR" = "/opt/roboparty/bin" ]; then
+if [ "$SCRIPT_DIR" = "$BASE_DIR/bin" ]; then
     DEBIAN_MODE=1
-    CAMERA_SHARE="$BASE_DIR/share/roboparty_camera"
-    ROS_ENV_FILE="$BASE_DIR/bin/ros_environment.sh"
-    DDS_PROFILE_FILE="$BASE_DIR/share/rt_fastdds_profile.xml"
+    CAMERA_SHARE="${ROBOPARTY_CAMERA_SHARE:-$BASE_DIR/share/roboparty_camera}"
+    ROS_ENV_FILE="${ROBOPARTY_ROS_ENV:-$BASE_DIR/bin/ros_environment.sh}"
+    DDS_PROFILE_FILE="${ROBOPARTY_DDS_PROFILE:-$BASE_DIR/share/rt_fastdds_profile.xml}"
     DEPTH_CONFIG="$CAMERA_SHARE/configs/$POLICY_FILE"
     REALSENSE_CONFIG="$CAMERA_SHARE/configs/realsense_d435i.yaml"
 else
     DEBIAN_MODE=0
-    CAMERA_DIR="$BASE_DIR/src/camera"
-    ROS_ENV_FILE="$BASE_DIR/tools/ros_environment.sh"
-    DDS_PROFILE_FILE="$BASE_DIR/assets/rt_fastdds_profile.xml"
+    CAMERA_DIR="${ROBOPARTY_CAMERA_DIR:-$BASE_DIR/src/camera}"
+    ROS_ENV_FILE="${ROBOPARTY_ROS_ENV:-$BASE_DIR/tools/ros_environment.sh}"
+    DDS_PROFILE_FILE="${ROBOPARTY_DDS_PROFILE:-$BASE_DIR/assets/rt_fastdds_profile.xml}"
     DEPTH_CONFIG="$CAMERA_DIR/configs/$POLICY_FILE"
     REALSENSE_CONFIG="$CAMERA_DIR/configs/realsense_d435i.yaml"
 fi
@@ -272,7 +277,7 @@ if [ "$DEBIAN_MODE" -eq 0 ]; then
     source install/setup.bash
     SETUP_CMD="source install/setup.bash"
 else
-    # Debian 安装：直接加载 /opt/roboparty 环境
+    # Debian 安装：直接加载安装前缀环境
     source "$BASE_DIR/setup.bash"
     SETUP_CMD="source $BASE_DIR/setup.bash"
 fi

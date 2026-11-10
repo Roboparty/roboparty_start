@@ -122,6 +122,7 @@ start_component() {
     local launch_cmd=$2
     local node_name=$3
     local sleep_time=$4
+    local required=${5:-1}
 
     print_info "启动 $session_name ..."
     local lock_held="${ROBOPARTY_CONTROL_LOCK_HELD:-0}"
@@ -163,6 +164,9 @@ start_component() {
 
     if ! ros2 node list | grep -q "$node_name"; then
         print_error "$session_name 启动失败！未检测到 $node_name 节点。"
+        if [ "$required" != "1" ]; then
+            return 1
+        fi
         if [ "$FOREGROUND" = "1" ]; then
             for pid in "${PIDS[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
         else
@@ -176,6 +180,25 @@ start_component() {
 cleanup_sessions() {
     screen -S inference_session -X quit 2>/dev/null
     screen -S joy_session -X quit 2>/dev/null
+    screen -S navigation_session -X quit 2>/dev/null
+}
+
+# 函数：启动可选导航（依赖 roboparty-navigation，未安装时静默跳过）
+start_navigation() {
+    local site="${ROBOPARTY_NAV_SITE:-$BASE_DIR/share/roboparty_navigation/sites/garden/site.yaml}"
+    if ! ros2 pkg prefix nav2_localization_adapter >/dev/null 2>&1; then
+        print_info "未安装 nav2_localization_adapter，跳过导航"
+        return 0
+    fi
+    if [ ! -f "$site" ]; then
+        print_info "导航站点配置不存在: $site，跳过导航"
+        return 0
+    fi
+    print_info "选择导航站点: $site"
+    start_component "navigation_session" \
+        "ros2 launch nav2_localization_adapter bringup.launch.py site:=$site rviz:=false use_sim_time:=false" \
+        "nav2_localization_adapter" 8 0 || \
+        print_info "navigation_session 启动失败（可选组件），请查看 screen -r navigation_session"
 }
 
 # 函数：详细验证 DDS 配置是否生效
@@ -256,20 +279,25 @@ verify_dds_effectiveness() {
     fi
 }
 
-# 脚本安装于 Debian 包时为 /opt/roboparty/bin，源码树中为 <repo>/tools。
+# 安装前缀优先取 ROBOOS_PREFIX（/etc/roboos/env 或环境变量），其次由脚本位置推导。
+# 脚本安装于 Debian 包时为 <prefix>/bin，源码树中为 <repo>/tools。
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -r /etc/roboos/env ] && . /etc/roboos/env
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -n "${ROBOOS_PREFIX:-}" ] && [ "$SCRIPT_DIR" = "$ROBOOS_PREFIX/bin" ]; then
+    BASE_DIR="$ROBOOS_PREFIX"
+fi
 
-if [ "$SCRIPT_DIR" = "/opt/roboparty/bin" ]; then
+if [ "$SCRIPT_DIR" = "$BASE_DIR/bin" ]; then
     DEBIAN_MODE=1
-    ROBOT_DIR="$BASE_DIR/share/roboparty_inference/robots"
-    ROS_ENV_FILE="$BASE_DIR/bin/ros_environment.sh"
-    DDS_PROFILE_FILE="$BASE_DIR/share/rt_fastdds_profile.xml"
+    ROBOT_DIR="${ROBOPARTY_ROBOTS_DIR:-$BASE_DIR/share/roboparty_inference/robots}"
+    ROS_ENV_FILE="${ROBOPARTY_ROS_ENV:-$BASE_DIR/bin/ros_environment.sh}"
+    DDS_PROFILE_FILE="${ROBOPARTY_DDS_PROFILE:-$BASE_DIR/share/rt_fastdds_profile.xml}"
 else
     DEBIAN_MODE=0
-    ROBOT_DIR="$BASE_DIR/src/inference/robots"
-    ROS_ENV_FILE="$BASE_DIR/tools/ros_environment.sh"
-    DDS_PROFILE_FILE="$BASE_DIR/assets/rt_fastdds_profile.xml"
+    ROBOT_DIR="${ROBOPARTY_ROBOTS_DIR:-$BASE_DIR/src/inference/robots}"
+    ROS_ENV_FILE="${ROBOPARTY_ROS_ENV:-$BASE_DIR/tools/ros_environment.sh}"
+    DDS_PROFILE_FILE="${ROBOPARTY_DDS_PROFILE:-$BASE_DIR/assets/rt_fastdds_profile.xml}"
 fi
 
 POLICY_FILE="$POLICY"
@@ -335,7 +363,7 @@ if [ "$DEBIAN_MODE" -eq 0 ]; then
     source install/setup.bash
     SETUP_CMD="source install/setup.bash"
 else
-    # Debian 安装：直接加载 /opt/roboparty 环境
+    # Debian 安装：直接加载安装前缀环境
     source "$BASE_DIR/setup.bash"
     SETUP_CMD="source $BASE_DIR/setup.bash"
 fi
@@ -352,12 +380,13 @@ fi
 
 start_component "inference_session" "ros2 launch roboparty_inference inference.launch.py robot:=$ROBOT policy:=$POLICY" "inference_node" 5 || exit 1
 start_component "joy_session" "ros2 run joy joy_node" "joy_node" 2 || exit 1
+start_navigation
 
 # 验证节点的 DDS 配置
 verify_dds_effectiveness
 
 if [ "$FOREGROUND" = "1" ]; then
-    print_success "前台模式：inference/joy 已启动，等待退出"
+    print_success "前台模式：inference/joy/navigation 已启动，等待退出"
     status=0
     wait -n || status=$?
     for pid in "${PIDS[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
@@ -371,11 +400,13 @@ print_success "所有组件已在后台成功启动！"
 print_success "使用以下命令查看各组件输出："
 print_success "推理模块: screen -r inference_session"
 print_success "手柄控制: screen -r joy_session"
+print_info "导航模块(如已安装): screen -r navigation_session"
 print_success "----------------------------------------"
 print_info "若要退出某个screen会话，按Ctrl+A然后按D"
 print_info "使用以下命令停止所有组件："
 print_info "screen -S inference_session -X quit"
 print_info "screen -S joy_session -X quit"
+print_info "screen -S navigation_session -X quit"
 print_success "----------------------------------------"
 print_info "手柄控制说明:"
 print_info "X键: 使能/失能电机"

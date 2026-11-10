@@ -16,7 +16,7 @@
 ```bash
 sudo apt install roboparty-start
 ```
-对应的脚本及网络配置将自动部署到 `/opt/roboparty/` 相关的目录系统中。
+对应的脚本及网络配置将自动部署到安装前缀（默认 `/opt/roboparty/`）相关的目录系统中。
 
 git clone https://github.com/Roboparty/roboparty_start
 

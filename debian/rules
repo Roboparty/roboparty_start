@@ -1,17 +1,23 @@
 #!/usr/bin/make -f
+
+INSTALL_PREFIX ?= /opt/roboparty
 %:
 	dh $@
 
 override_dh_install:
 	dh_install
+	install -D -m 755 start_robot.sh debian/roboparty-start$(INSTALL_PREFIX)/bin/start_robot.sh
+	install -D -m 755 start_camera.sh debian/roboparty-start$(INSTALL_PREFIX)/bin/start_camera.sh
+	install -D -m 755 ros_environment.sh debian/roboparty-start$(INSTALL_PREFIX)/bin/ros_environment.sh
+	install -D -m 644 rt_fastdds_profile.xml debian/roboparty-start$(INSTALL_PREFIX)/share/rt_fastdds_profile.xml
 	if [ -f "linux-router/lnxrouter" ]; then \
-		mkdir -p debian/roboparty-start/opt/roboparty/bin; \
-		cp linux-router/lnxrouter debian/roboparty-start/opt/roboparty/bin/; \
+		mkdir -p debian/roboparty-start$(INSTALL_PREFIX)/bin; \
+		cp linux-router/lnxrouter debian/roboparty-start$(INSTALL_PREFIX)/bin/; \
 	fi
 
 override_dh_fixperms:
 	dh_fixperms
-	chmod +x debian/roboparty-start/opt/roboparty/bin/*.sh || true
-	if [ -f "debian/roboparty-start/opt/roboparty/bin/lnxrouter" ]; then \
-		chmod +x debian/roboparty-start/opt/roboparty/bin/lnxrouter; \
+	chmod +x debian/roboparty-start$(INSTALL_PREFIX)/bin/*.sh || true
+	if [ -f "debian/roboparty-start$(INSTALL_PREFIX)/bin/lnxrouter" ]; then \
+		chmod +x debian/roboparty-start$(INSTALL_PREFIX)/bin/lnxrouter; \
 	fi
